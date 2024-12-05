@@ -1,4 +1,6 @@
-﻿Shader "HOG/FOWRender"
+﻿// Upgrade NOTE: replaced 'mul(UNITY_MATRIX_MVP,*)' with 'UnityObjectToClipPos(*)'
+
+Shader "HOG/FOWRender"
 {
 	Properties
 	{
@@ -34,7 +36,7 @@
 		v2f vert(in appdata_base v)
 		{
 			v2f o;
-			o.pos = mul(UNITY_MATRIX_MVP, v.vertex);
+			o.pos = UnityObjectToClipPos(v.vertex);
 			o.uv = v.texcoord;
 			return o;
 		}
@@ -42,7 +44,7 @@
 		fixed4 frag(v2f i) : SV_Target
 		{
 			half4 data = tex2D(_MainTex, i.uv);
-			half2 fog = lerp(data.rg, data.ba, _BlendFactor);
+			half2 fog = lerp(data.rg, data.ba, _BlendFactor); // 上次当前视野、走过地方和当前最新的进行插值过渡
 			half4 color = lerp(_Unexplored, _Explored, fog.g);
 			color.a = (1 - fog.r) * color.a;
 			return color;

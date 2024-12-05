@@ -45,11 +45,11 @@ public class FOWSystem : MonoSingleton<FOWSystem>
 
 	// Color buffers -- prepared on the worker thread.
 	protected Color32[] mBuffer0;  // 真正传入Shader进行渲染的Buffer
-	protected Color32[] mBuffer1;  // 
+	protected Color32[] mBuffer1;  // 记录当前值 r=当前视野(全透明) g=走过的地方(半透明)
 	protected Color32[] mBuffer2;  // 对Buffer1进行混合时用到临时Buffer
 
 	// textures -- we'll be blending in the shader
-	protected Texture2D mTexture;
+	protected Texture2D mTexture; // 传入Shader中自定义纹理
 
 	// Whether some color buffer is ready to be uploaded to VRAM
 	protected float mBlendFactor = 0f;
@@ -65,38 +65,38 @@ public class FOWSystem : MonoSingleton<FOWSystem>
 	/// Size of your world in units. For example, if you have a 256x256 terrain, then just leave this at '256'.
 	/// </summary>
     /// 
-	public float worldSize = 512f;
+	public float worldSize = 512f;  // 世界大小
 
 	/// <summary>
 	/// Size of the fog of war texture. Higher resolution will result in more precise fog of war, at the cost of performance.
 	/// </summary>
 
-	public int textureSize = 512;
+	public int textureSize = 512;  // 纹理大小
 
 	/// <summary>
 	/// How frequently the visibility checks get performed.
 	/// </summary>
 
-	public float updateFrequency = 0.3f;
+	public float updateFrequency = 0.3f; // Shader更新Texture的间隔
 
 	/// <summary>
 	/// How long it takes for textures to blend from one to another.
 	/// </summary>
 
-	public float textureBlendTime = 0.5f;
+	public float textureBlendTime = 0.5f; // 历史和当前迷雾过渡时间
 
-	/// <summary>
-	/// How many blur iterations will be performed. More iterations result in smoother edges.
-	/// Blurring happens on a separate thread and does not affect performance.
-	/// </summary>
+    /// <summary>
+    /// How many blur iterations will be performed. More iterations result in smoother edges.
+    /// Blurring happens on a separate thread and does not affect performance.
+    /// </summary>
 
-	public int blurIterations = 2;
+    public int blurIterations = 2;  // 模糊处理次数
 
     /// <summary>
     /// How many offset radius will be adjust. 
     /// </summary>
 
-    public float radiusOffset = 0f;
+    public float radiusOffset = 0f; // 视野半径 + radiusOffset为真实的大小
 
     /// <summary>
     /// If disable it, the whole system do not work
@@ -193,7 +193,7 @@ public class FOWSystem : MonoSingleton<FOWSystem>
         mAdded.Clear();
         
         // Add a thread update function -- all visibility checks will be done on a separate thread
-        mThread = new Thread(ThreadUpdate);
+        mThread = new Thread(ThreadUpdate); // 开启线程处理Buffer1数据
         mThreadWork = true;
         mThread.Start();
     }
@@ -341,14 +341,14 @@ public class FOWSystem : MonoSingleton<FOWSystem>
 		float factor = (textureBlendTime > 0f) ? Mathf.Clamp01(mBlendFactor + mElapsed / textureBlendTime) : 1f;
 
 		// Clear the buffer's red channel (channel used for current visibility -- it's updated right after)
-		for (int i = 0, imax = mBuffer0.Length; i < imax; ++i)
+		for (int i = 0, imax = mBuffer0.Length; i < imax; ++i) // 需要渲染的Buffer0和当前状态Buffer1进行插值 Buffer0 r=上一次的视野 g=上一次走过的 b、a不用关心，后面会更新b、a
 		{
 			mBuffer0[i] = Color32.Lerp(mBuffer0[i], mBuffer1[i], factor);
 			mBuffer1[i].r = 0;
 		}
 
 		// For conversion from world coordinates to texture coordinates
-		float worldToTex = (float)textureSize / worldSize;
+		float worldToTex = (float)textureSize / worldSize; // 比例
 
 		// Update the visibility buffer, one revealer at a time
 		for (int i = 0; i < mRevealers.size; ++i)
@@ -356,18 +356,18 @@ public class FOWSystem : MonoSingleton<FOWSystem>
 			IFOWRevealer rev = mRevealers[i];
             if (rev.IsValid())
             {
-                RevealUsingRadius(rev, worldToTex);
+                RevealUsingRadius(rev, worldToTex); // 计算视野，并Buffer1的r通道中
             }
         }
 
 		// Blur the final visibility data
-		for (int i = 0; i < blurIterations; ++i) BlurVisibility();
+		for (int i = 0; i < blurIterations; ++i) BlurVisibility(); // 将Buffer1进行模糊处理
 
 		// Reveal the map based on what's currently visible
-		RevealMap();
+		RevealMap(); // 新增的视野范围增加到已走过的
 
         // Merge two buffer to one
-        MergeBuffer();
+        MergeBuffer(); // Buffer1 r、g当前视野和走过到赋值到 Buffer0 b、a通道，此时b、a通道为最新的当前状态
     }
 
 	/// <summary>
@@ -495,7 +495,7 @@ public class FOWSystem : MonoSingleton<FOWSystem>
     /// Update the specified texture with the new color buffer.
     /// </summary>
 
-    void UpdateTexture ()
+    void UpdateTexture () // 将Buffer0数据塞到Texture中 准备给FOWRender.shader进行处理
 	{
         if (!enableRender)
         {
